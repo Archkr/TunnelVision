@@ -22,7 +22,7 @@ import { eventSource, event_types, extension_prompt_types, extension_prompt_role
 import { getContext } from '../../../st-context.js';
 import { ToolManager } from '../../../tool-calling.js';
 import { renderExtensionTemplateAsync } from '../../../extensions.js';
-import { getSettings, isLorebookEnabled, setLorebookEnabled } from './tree-store.js';
+import { getSettings, isLorebookEnabled, setLorebookEnabled, isNativeInjectionBook } from './tree-store.js';
 import { preflightToolRuntimeState, registerTools } from './tool-registry.js';
 import { buildNotebookPrompt, resetNotebookWriteGuard } from './tools/notebook.js';
 import { bindUIEvents, refreshUI } from './ui-controller.js';
@@ -561,6 +561,11 @@ function onWorldInfoEntriesLoaded(data) {
             if (arr[i].world && isLorebookEnabled(arr[i].world)) {
                 // Let constant (always-active) entries through if the toggle is on
                 if (passthrough && arr[i].constant) {
+                    passed++;
+                    continue;
+                }
+                // Let native-injection books through — ST handles their positions/outlets
+                if (isNativeInjectionBook(arr[i].world)) {
                     passed++;
                     continue;
                 }

@@ -88,6 +88,16 @@
                         <div class="tv-help-text">Controls what the AI can do with this lorebook. Read-only blocks Remember/Update/Forget. Write-only hides it from Search results.</div>
                     </div>
 
+                    <!-- Per-Lorebook Injection Mode -->
+                    <div class="tv-setting-row">
+                        <label class="tv-label" for="tv_book_injection_mode">Injection Mode</label>
+                        <select id="tv_book_injection_mode" class="tv-select">
+                            <option value="sidecar">Sidecar (default) — TV handles injection</option>
+                            <option value="native">Native — ST handles injection (preserves outlets &amp; positions)</option>
+                        </select>
+                        <div class="tv-help-text">Controls how entries from this lorebook reach the prompt. <strong>Sidecar</strong>: TV suppresses normal WI triggers and injects entries via smart-context/sidecar retrieval. <strong>Native</strong>: entries keep their configured positions, outlets, and depth — ST's WI system handles injection. TV tools (Search, Remember, Update) still work in both modes.</div>
+                    </div>
+
                     <!-- Tree Building Section -->
                     <div class="tv-card">
                         <div class="tv-card-header">

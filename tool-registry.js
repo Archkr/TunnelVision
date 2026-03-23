@@ -10,8 +10,9 @@ import { selected_world_info, world_info, loadWorldInfo, METADATA_KEY } from '..
 import { characters, this_chid, chat_metadata } from '../../../../script.js';
 import { getCharaFilename } from '../../../utils.js';
 import { callGenericPopup, POPUP_TYPE, POPUP_RESULT } from '../../../popup.js';
-import { isLorebookEnabled, getSettings, getTree, getBookDescription, syncTrackerUidsForLorebook, canReadBook, canWriteBook } from './tree-store.js';
+import { isLorebookEnabled, getSettings, getTree, getBookDescription, syncTrackerUidsForLorebook, canReadBook, canWriteBook, isNativeInjectionBook } from './tree-store.js';
 import { logToolCallStarted } from './activity-feed.js';
+import { findEntry } from './entry-manager.js';
 
 import { getDefinition as getSearchDef, getTreeOverview, TOOL_NAME as SEARCH_NAME, COMPACT_DESCRIPTION as SEARCH_COMPACT } from './tools/search.js';
 import { getDefinition as getRememberDef, TOOL_NAME as REMEMBER_NAME, COMPACT_DESCRIPTION as REMEMBER_COMPACT } from './tools/remember.js';
@@ -320,6 +321,16 @@ export function getReadableBooks() {
 }
 
 /**
+ * Get active lorebooks that TV manages injection for (excludes native-injection books).
+ * Use this for smart-context and sidecar retrieval — these should NOT inject content
+ * from books where ST handles injection natively (outlets, positions, etc.).
+ * @returns {string[]}
+ */
+export function getInjectionManagedBooks() {
+    return getActiveTunnelVisionBooks().filter(b => !isNativeInjectionBook(b));
+}
+
+/**
  * Build a descriptive list of active lorebooks for tool descriptions.
  * Uses user-set description, falls back to tree root summary, falls back to top-level labels.
  * @returns {string} Formatted multi-line description of available lorebooks.
@@ -374,24 +385,31 @@ export function getDefaultToolDescriptions() {
 
 /**
  * Format args object into readable HTML for the confirmation popup.
+ * Long string values get a collapsible <details> block instead of truncation.
  * @param {Object} args
+ * @param {Set<string>} [skipKeys] - Keys to omit from generic display (handled separately)
  * @returns {string}
  */
 function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function formatConfirmArgs(args) {
+/** Threshold above which a string value gets a collapsible block. */
+const LONG_VALUE_THRESHOLD = 120;
+
+function formatConfirmArgs(args, skipKeys = new Set()) {
     if (!args || typeof args !== 'object') return '';
     const lines = [];
     for (const [key, value] of Object.entries(args)) {
+        if (skipKeys.has(key)) continue;
         let display;
         if (Array.isArray(value)) {
-            display = escapeHtml(value.join(', '));
-        } else if (typeof value === 'string' && value.length > 200) {
-            display = escapeHtml(value.substring(0, 200)) + '...';
+            display = `<span>${escapeHtml(value.join(', '))}</span>`;
+        } else if (typeof value === 'string' && value.length > LONG_VALUE_THRESHOLD) {
+            const escaped = escapeHtml(value);
+            display = `<details class="tv-confirm-longval"><summary>${escapeHtml(value.substring(0, LONG_VALUE_THRESHOLD))}…</summary><pre class="tv-confirm-pre">${escaped}</pre></details>`;
         } else {
-            display = escapeHtml(value ?? '');
+            display = `<span>${escapeHtml(value ?? '')}</span>`;
         }
         lines.push(`<div><strong>${escapeHtml(key)}:</strong> ${display}</div>`);
     }
@@ -399,15 +417,120 @@ function formatConfirmArgs(args) {
 }
 
 /**
+ * Build a simple word-level diff between two strings.
+ * Returns HTML with <ins> (additions) and <del> (removals) spans.
+ * Uses a line-by-line diff so structural changes are clear.
+ * @param {string} oldText
+ * @param {string} newText
+ * @returns {string} HTML diff
+ */
+function buildLineDiff(oldText, newText) {
+    const oldLines = oldText.split('\n');
+    const newLines = newText.split('\n');
+
+    // LCS-based line diff (Myers-style simplified)
+    const m = oldLines.length;
+    const n = newLines.length;
+
+    // Guard against huge entries — LCS is O(m*n) memory/time
+    if (m + n > 500) {
+        return `<div class="tv-diff-remove">${escapeHtml(oldText)}</div><div class="tv-diff-add">${escapeHtml(newText)}</div>`;
+    }
+
+    // Build LCS table
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) {
+        for (let j = n - 1; j >= 0; j--) {
+            if (oldLines[i] === newLines[j]) {
+                dp[i][j] = dp[i + 1][j + 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+            }
+        }
+    }
+
+    // Trace back through LCS to build diff hunks
+    const parts = [];
+    let i = 0; let j = 0;
+    while (i < m || j < n) {
+        if (i < m && j < n && oldLines[i] === newLines[j]) {
+            parts.push({ type: 'same', text: oldLines[i] });
+            i++; j++;
+        } else if (j < n && (i >= m || dp[i][j + 1] >= dp[i + 1][j])) {
+            parts.push({ type: 'add', text: newLines[j] });
+            j++;
+        } else {
+            parts.push({ type: 'remove', text: oldLines[i] });
+            i++;
+        }
+    }
+
+    // Render to HTML
+    return parts.map(p => {
+        const escaped = escapeHtml(p.text);
+        if (p.type === 'add') return `<div class="tv-diff-add">+ ${escaped}</div>`;
+        if (p.type === 'remove') return `<div class="tv-diff-remove">- ${escaped}</div>`;
+        return `<div class="tv-diff-same">  ${escaped}</div>`;
+    }).join('');
+}
+
+/**
  * Show a confirmation popup for a tool action.
+ * For UPDATE operations, fetches the original entry and renders a diff.
  * @param {string} displayName - Human-readable tool name
  * @param {Object} args - Tool arguments from the AI
+ * @param {string} [toolName] - Internal tool name (used to detect UPDATE)
  * @returns {Promise<boolean>} True if user approved
  */
-async function showToolConfirmation(displayName, args) {
+async function showToolConfirmation(displayName, args, toolName) {
+    let extraHtml = '';
+    const skipKeys = new Set();
+
+    // For UPDATE operations: fetch original entry and show a diff for the content field
+    if (toolName === UPDATE_NAME && args?.uid !== undefined && args?.content) {
+        try {
+            const { book } = resolveTargetBook(args.lorebook);
+            if (book) {
+                const found = await findEntry(book, Number(args.uid));
+                if (found?.entry) {
+                    const originalContent = found.entry.content || '';
+                    const newContent = args.content;
+
+                    // Mark content key as handled — we render it in the diff block
+                    skipKeys.add('content');
+
+                    const diffHtml = buildLineDiff(originalContent, newContent);
+                    const isLong = originalContent.length + newContent.length > 600;
+
+                    const entryTitle = escapeHtml(found.entry.comment || `Entry #${args.uid}`);
+
+                    if (isLong) {
+                        extraHtml = `
+<details class="tv-confirm-diff-wrap" open>
+  <summary class="tv-confirm-diff-summary">Content diff for <strong>${entryTitle}</strong></summary>
+  <div class="tv-confirm-diff">${diffHtml}</div>
+</details>`;
+                    } else {
+                        extraHtml = `
+<div class="tv-confirm-diff-wrap">
+  <div class="tv-confirm-diff-label">Content diff for <strong>${entryTitle}</strong></div>
+  <div class="tv-confirm-diff">${diffHtml}</div>
+</div>`;
+                    }
+                }
+            }
+        } catch (e) {
+            // Non-critical — diff display is best-effort
+            console.warn('[TunnelVision] Failed to fetch original entry for diff:', e);
+        }
+    }
+
+    const argsHtml = formatConfirmArgs(args, skipKeys);
+
     const html = `<div class="tv-confirm-popup">
-    <div class="tv-confirm-title">TunnelVision wants to: <strong>${displayName}</strong></div>
-    <div class="tv-confirm-args">${formatConfirmArgs(args)}</div>
+    <div class="tv-confirm-title">TunnelVision wants to: <strong>${escapeHtml(displayName)}</strong></div>
+    ${argsHtml ? `<div class="tv-confirm-args">${argsHtml}</div>` : ''}
+    ${extraHtml}
     <div class="tv-confirm-hint">Approve this action?</div>
 </div>`;
     const result = await callGenericPopup(html, POPUP_TYPE.CONFIRM);
@@ -418,11 +541,12 @@ async function showToolConfirmation(displayName, args) {
  * Wrap a tool's action with a confirmation gate.
  * @param {Function} originalAction - The tool's original action function
  * @param {string} displayName - Human-readable tool name
+ * @param {string} toolName - Internal tool name (for diff-aware confirmation)
  * @returns {Function} Wrapped action that shows confirmation first
  */
-function wrapWithConfirmation(originalAction, displayName) {
+function wrapWithConfirmation(originalAction, displayName, toolName) {
     return async function (args) {
-        const approved = await showToolConfirmation(displayName, args);
+        const approved = await showToolConfirmation(displayName, args, toolName);
         if (!approved) {
             return 'Action denied by user. The user chose not to allow this operation. Try a different approach or ask the user what they want.';
         }
@@ -543,7 +667,7 @@ export async function registerTools() {
 
         // Wrap action with confirmation gate for confirmable tools
         if (CONFIRMABLE_TOOLS.has(name) && confirmTools[name]) {
-            registrationDef.action = wrapWithConfirmation(registrationDef.action, registrationDef.displayName || name);
+            registrationDef.action = wrapWithConfirmation(registrationDef.action, registrationDef.displayName || name, name);
         }
 
         // Wrap action to fire a live feed item the instant the tool is invoked
@@ -637,7 +761,7 @@ export async function checkToolConfirmation(toolName, args) {
         [REORGANIZE_NAME]: 'Reorganize (Sidecar)',
         [MERGESPLIT_NAME]: 'Merge/Split (Sidecar)',
     };
-    return showToolConfirmation(displayNames[toolName] || toolName, args);
+    return showToolConfirmation(displayNames[toolName] || toolName, args, toolName);
 }
 
 export { SEARCH_NAME, REMEMBER_NAME, UPDATE_NAME, FORGET_NAME, REORGANIZE_NAME, SUMMARIZE_NAME, MERGESPLIT_NAME, NOTEBOOK_NAME, ALL_TOOL_NAMES, CONFIRMABLE_TOOLS };

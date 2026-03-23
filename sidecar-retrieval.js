@@ -21,6 +21,7 @@ import {
     findNodeById,
     getAllEntryUids,
     getSettings,
+    isNativeInjectionBook,
 } from './tree-store.js';
 import { getReadableBooks } from './tool-registry.js';
 import { hasEvaluableConditions, separateConditions, mapSelectiveLogic, describeSelectiveLogic, CONDITION_DESCRIPTIONS, CONDITION_LABELS, rollKeywordProbability, formatCondition } from './conditions.js';
@@ -238,7 +239,7 @@ async function resolveNodeContent(nodeIds) {
     const seenEntries = new Set();
 
     for (const nodeId of nodeIds) {
-        for (const bookName of getReadableBooks()) {
+        for (const bookName of getReadableBooks().filter(b => !isNativeInjectionBook(b))) {
             const tree = getTree(bookName);
             if (!tree?.root) continue;
 
