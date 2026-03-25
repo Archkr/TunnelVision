@@ -157,9 +157,17 @@ export async function generateAnalytical({ prompt, systemPrompt = ANALYTICAL_SYS
         console.warn('[TunnelVision] Sidecar generation failed, falling back to main API:', e.message);
     }
 
-    const { generateRaw } = getContext();
-    const result = await generateRaw({ prompt, systemPrompt });
-    return typeof result === 'string' ? result.replace(THINK_BLOCK_RE, '').trim() : result;
+    try {
+        const { generateRaw } = getContext();
+        const result = await generateRaw({ prompt, systemPrompt });
+        return typeof result === 'string' ? result.replace(THINK_BLOCK_RE, '').trim() : result;
+    } catch (e) {
+        const msg = e?.message || String(e);
+        if (/failed to fetch/i.test(msg)) {
+            throw new Error('LLM request failed (network error). Check your API connection and that your provider is online.');
+        }
+        throw e;
+    }
 }
 
 /**

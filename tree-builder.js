@@ -66,13 +66,27 @@ const THINK_BLOCK_RE = /<think[\s\S]*?<\/think>/gi;
  * falls back to ST's generateRaw when not. Strips thinking blocks from responses.
  */
 async function generateRaw(opts) {
+    // Try sidecar first, fall back to generateRaw on failure
     if (isSidecarConfigured()) {
-        console.debug('[TunnelVision] tree-builder: using SIDECAR for LLM call');
-        return sidecarGenerate(opts);
+        try {
+            console.debug('[TunnelVision] tree-builder: using SIDECAR for LLM call');
+            return await sidecarGenerate(opts);
+        } catch (e) {
+            console.warn('[TunnelVision] tree-builder: sidecar failed, falling back to main API:', e.message);
+        }
     }
-    console.debug('[TunnelVision] tree-builder: using ST generateRaw FALLBACK (no sidecar configured)');
-    const result = await _generateRaw(opts);
-    return typeof result === 'string' ? result.replace(THINK_BLOCK_RE, '').trim() : result;
+
+    try {
+        console.debug('[TunnelVision] tree-builder: using ST generateRaw');
+        const result = await _generateRaw(opts);
+        return typeof result === 'string' ? result.replace(THINK_BLOCK_RE, '').trim() : result;
+    } catch (e) {
+        const msg = e?.message || String(e);
+        if (/failed to fetch/i.test(msg)) {
+            throw new Error('LLM request failed (network error). Check your API connection, model availability, and that your provider is online.');
+        }
+        throw e;
+    }
 }
 
 /**
