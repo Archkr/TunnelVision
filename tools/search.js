@@ -194,6 +194,7 @@ function formatChildrenForNavigation(parentNode) {
 
     let text = '';
     for (const child of children) {
+        if (child.hidden) continue;
         const entryCount = getAllEntryUids(child).length;
         const hasChildren = (child.children || []).length > 0;
         const depthIndicator = hasChildren ? ' [has sub-categories]' : ' [leaf]';
@@ -237,6 +238,7 @@ function buildUnifiedTreeOverview() {
         const tree = getTree(bookName);
         if (!tree || !tree.root) continue;
         for (const child of (tree.root.children || [])) {
+            if (child.hidden) continue;
             const entryCount = getAllEntryUids(child).length;
             const hasChildren = (child.children || []).length > 0;
             const depthIndicator = hasChildren ? ' [has sub-categories]' : ' [leaf]';
@@ -275,6 +277,7 @@ function buildUnifiedCollapsedOverview(maxDepth = Infinity) {
         if (!tree || !tree.root) continue;
         // Show each book's children at the top level
         for (const child of (tree.root.children || [])) {
+            if (child.hidden) continue;
             overview += formatCollapsedNode(child, 1, false, maxDepth);
         }
         if ((tree.root.entryUids || []).length > 0) {
@@ -365,6 +368,7 @@ function formatCollapsedNode(node, depth, isRoot = false, maxDepth = Infinity) {
     }
 
     for (const child of children) {
+        if (child.hidden) continue;
         text += formatCollapsedNode(child, depth + 1, false, maxDepth);
     }
 

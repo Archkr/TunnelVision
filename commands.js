@@ -697,8 +697,9 @@ function getOrCreateDedupedNode(bookName) {
         if (child.label === 'Deduped') return { node: child, tree };
     }
 
-    // Create one
+    // Create one — hidden from AI traversal
     const node = createTreeNode('Deduped', 'Entries absorbed during deduplication. Safe to delete.');
+    node.hidden = true;
     tree.root.children = tree.root.children || [];
     tree.root.children.push(node);
     saveTree(bookName, tree);
