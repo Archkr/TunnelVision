@@ -27,6 +27,7 @@ import { getReadableBooks } from './tool-registry.js';
 import { hasEvaluableConditions, separateConditions, mapSelectiveLogic, describeSelectiveLogic, CONDITION_DESCRIPTIONS, CONDITION_LABELS, rollKeywordProbability, formatCondition } from './conditions.js';
 import { isSidecarConfigured, sidecarGenerate, getSidecarModelLabel } from './llm-sidecar.js';
 import { logSidecarRetrieval, logConditionalEvaluations, setSidecarActive } from './activity-feed.js';
+import { buildLanguageDirective } from './agent-utils.js';
 
 const TV_SIDECAR_RETRIEVAL_KEY = 'tunnelvision_sidecar_retrieval';
 
@@ -458,9 +459,10 @@ export async function runSidecarRetrieval() {
     try {
         // Ask sidecar LLM to pick relevant nodes AND evaluate conditionals
         const prompt = buildRetrievalPrompt(treeOverview, recentChat, conditionalSection);
+        const langDirective = buildLanguageDirective();
         const response = await sidecarGenerate({
             prompt,
-            systemPrompt: SIDECAR_SYSTEM_PROMPT,
+            systemPrompt: SIDECAR_SYSTEM_PROMPT + langDirective,
         });
 
         const { nodeIds, reasoning, conditionalEvaluations } = parseSidecarResponse(response);

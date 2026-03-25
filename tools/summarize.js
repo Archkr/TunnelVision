@@ -16,6 +16,7 @@ import { getTree, findNodeById, createTreeNode, saveTree, getSettings } from '..
 import { createEntry } from '../entry-manager.js';
 import { getActiveTunnelVisionBooks, resolveTargetBook, getBookListWithDescriptions } from '../tool-registry.js';
 import { markAutoSummaryComplete } from '../auto-summary.js';
+import { getLanguageInstruction } from '../agent-utils.js';
 import { getContext } from '../../../../st-context.js';
 import { hideChatMessageRange } from '../../../../chats.js';
 
@@ -182,7 +183,7 @@ When you notice related events forming a pattern or storyline, group them into "
                 },
                 summary: {
                     type: 'string',
-                    description: 'The scene/event summary. Write in past tense, third person. Include who was involved, what happened, key outcomes, and emotional beats.',
+                    description: `The scene/event summary. Write in past tense, third person. Include who was involved, what happened, key outcomes, and emotional beats.${getLanguageInstruction()}`,
                 },
                 participants: {
                     type: 'array',

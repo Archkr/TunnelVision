@@ -12,6 +12,7 @@ import { loadWorldInfo } from '../../../../world-info.js';
 import { getSettings } from '../tree-store.js';
 import { createEntry } from '../entry-manager.js';
 import { getActiveTunnelVisionBooks, resolveTargetBook, getBookListWithDescriptions } from '../tool-registry.js';
+import { getLanguageInstruction } from '../agent-utils.js';
 
 export const TOOL_NAME = 'TunnelVision_Remember';
 export const COMPACT_DESCRIPTION = 'Save a new fact, character detail, relationship, or world-building info to long-term memory.';
@@ -124,7 +125,7 @@ Save entries to the lorebook where they belong based on the descriptions above. 
                 },
                 content: {
                     type: 'string',
-                    description: 'The information to store. Write in third person, factual style. Include relevant names, places, and details.',
+                    description: `The information to store. Write in third person, factual style. Include relevant names, places, and details.${getLanguageInstruction()}`,
                 },
                 keys: {
                     type: 'array',

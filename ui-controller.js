@@ -112,6 +112,13 @@ export function bindUIEvents() {
         saveSettingsDebounced();
     });
 
+    // Output language
+    $('#tv_target_language').on('input', function () {
+        const settings = getSettings();
+        settings.targetLanguage = $(this).val();
+        saveSettingsDebounced();
+    });
+
     // Per-tool toggles
     $(document).on('change', '.tv_tool_enabled', onToolToggle);
 
@@ -257,6 +264,9 @@ export function refreshUI() {
 
     // Sync auto-detect pattern
     $('#tv_auto_detect_pattern').val(settings.autoDetectPattern || '');
+
+    // Sync output language
+    $('#tv_target_language').val(settings.targetLanguage || '');
 
     // Sync selective retrieval
     $('#tv_selective_retrieval').prop('checked', settings.selectiveRetrieval === true);

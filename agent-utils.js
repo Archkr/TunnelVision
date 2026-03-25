@@ -47,6 +47,76 @@ export function getEntryTitle(entry) {
     return entry.comment || entry.key?.[0] || `#${entry.uid}`;
 }
 
+// ── Output Language Directive ─────────────────────────────────────
+
+/** Native-language reinforcement lines for the top 30 languages */
+const NATIVE_REINFORCEMENTS = {
+    spanish: 'Escribe TODO en español. Sin excepciones.',
+    french: 'Écris TOUT en français. Sans exception.',
+    german: 'Schreibe ALLES auf Deutsch. Ohne Ausnahme.',
+    portuguese: 'Escreva TUDO em português. Sem exceções.',
+    italian: 'Scrivi TUTTO in italiano. Senza eccezioni.',
+    russian: 'Пиши ВСЁ на русском языке. Без исключений.',
+    japanese: 'すべて日本語で書いてください。例外なし。',
+    korean: '모든 것을 한국어로 작성하세요. 예외 없음.',
+    chinese: '用中文写所有内容。没有例外。',
+    arabic: 'اكتب كل شيء بالعربية. بدون استثناء.',
+    hindi: 'सब कुछ हिंदी में लिखें। कोई अपवाद नहीं।',
+    turkish: 'Her şeyi Türkçe yaz. İstisna yok.',
+    dutch: 'Schrijf ALLES in het Nederlands. Geen uitzonderingen.',
+    polish: 'Pisz WSZYSTKO po polsku. Bez wyjątków.',
+    thai: 'เขียนทุกอย่างเป็นภาษาไทย ไม่มีข้อยกเว้น',
+    vietnamese: 'Viết TẤT CẢ bằng tiếng Việt. Không ngoại lệ.',
+    indonesian: 'Tulis SEMUA dalam bahasa Indonesia. Tanpa pengecualian.',
+    czech: 'Piš VŠECHNO česky. Bez výjimek.',
+    swedish: 'Skriv ALLT på svenska. Inga undantag.',
+    greek: 'Γράψε ΤΑ ΠΑΝΤΑ στα ελληνικά. Χωρίς εξαιρέσεις.',
+    romanian: 'Scrie TOTUL în română. Fără excepții.',
+    hungarian: 'Írj MINDENT magyarul. Kivétel nélkül.',
+    finnish: 'Kirjoita KAIKKI suomeksi. Ei poikkeuksia.',
+    danish: 'Skriv ALT på dansk. Ingen undtagelser.',
+    norwegian: 'Skriv ALT på norsk. Ingen unntak.',
+    ukrainian: 'Пиши ВСЕ українською мовою. Без винятків.',
+    hebrew: 'כתוב הכל בעברית. ללא יוצא מן הכלל.',
+    malay: 'Tulis SEMUA dalam Bahasa Melayu. Tiada pengecualian.',
+    tagalog: 'Isulat ang LAHAT sa Tagalog. Walang eksepsyon.',
+    persian: 'همه چیز را به فارسی بنویس. بدون استثنا.',
+};
+
+/**
+ * Build a language directive string for TV prompts.
+ * Returns empty string if no language is configured.
+ * Append this to any system prompt where the LLM writes lorebook content.
+ * @param {string} [lang] - Language name (e.g. "Japanese"). If omitted, reads from settings.
+ * @returns {string}
+ */
+export function buildLanguageDirective(lang) {
+    const targetLang = lang ?? getSettings().targetLanguage;
+    if (!targetLang || !targetLang.trim()) return '';
+
+    const trimmed = targetLang.trim();
+    const key = trimmed.toLowerCase().replace(/[^a-z]/g, '');
+    const native = NATIVE_REINFORCEMENTS[key];
+
+    const lines = [
+        '\n\n## OUTPUT LANGUAGE REQUIREMENT',
+        `You MUST write ALL outputs in ${trimmed} — entry titles, entry content, summaries, category names, keywords, everything. This is non-negotiable. Do not fall back to English.`,
+    ];
+    if (native) lines.push(native);
+    return lines.join('\n');
+}
+
+/**
+ * Get a short language instruction for tool parameter descriptions.
+ * Returns empty string if no language is configured.
+ * @returns {string}
+ */
+export function getLanguageInstruction() {
+    const lang = getSettings().targetLanguage;
+    if (!lang || !lang.trim()) return '';
+    return ` Write in ${lang.trim()}.`;
+}
+
 // ── Analytical LLM Generation ─────────────────────────────────────
 
 const THINK_BLOCK_RE = /<think[\s\S]*?<\/think>/gi;
@@ -70,6 +140,10 @@ const ANALYTICAL_SYSTEM_PROMPT = [
  * @returns {Promise<string>}
  */
 export async function generateAnalytical({ prompt, systemPrompt = ANALYTICAL_SYSTEM_PROMPT }) {
+    // Append language directive if configured
+    const langDirective = buildLanguageDirective();
+    if (langDirective) systemPrompt += langDirective;
+
     // 4B: Try sidecar first if configured
     try {
         const { isSidecarConfigured, sidecarGenerate } = await import('./llm-sidecar.js');

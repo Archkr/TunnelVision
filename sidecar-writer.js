@@ -32,6 +32,7 @@ import { getDefinition as getForgetDef } from './tools/forget.js';
 import { getDefinition as getReorganizeDef } from './tools/reorganize.js';
 import { getDefinition as getMergeSplitDef } from './tools/merge-split.js';
 import { logSidecarWrite } from './activity-feed.js';
+import { buildLanguageDirective } from './agent-utils.js';
 
 // ─── Tree Overview (shared format with sidecar-retrieval.js) ─────
 
@@ -596,9 +597,10 @@ export async function runSidecarWriter() {
     try {
         // Ask sidecar what to write
         const prompt = buildWriterPrompt(treeOverview, recentChat);
+        const langDirective = buildLanguageDirective();
         const response = await sidecarGenerate({
             prompt,
-            systemPrompt: WRITER_SYSTEM_PROMPT,
+            systemPrompt: WRITER_SYSTEM_PROMPT + langDirective,
         });
 
         const _rawModel = getSidecarModelLabel() || 'unknown';

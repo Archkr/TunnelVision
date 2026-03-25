@@ -332,6 +332,9 @@ export const SETTING_DEFAULTS = {
     // 'native': TV does NOT suppress entries — ST handles injection at their configured positions/outlets.
     //           TV tools can still read/write entries, but injection is left to ST's WI system.
     bookInjectionModes: {},
+    // Output language: when set, all TV-generated content (entries, summaries, etc.)
+    // will be written in this language. Empty string = auto (match narrator/conversation).
+    targetLanguage: '',
     // Compact tool prompts: register one guide tool + one-liner descriptions to save tokens
     compactToolPrompts: true,
 };
