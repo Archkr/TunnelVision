@@ -786,19 +786,34 @@ function onChatCompletionSettingsReady(data) {
     // ({ type: "function", function: { ... } }). When the active backend
     // is Anthropic, convert them to the Messages API format so the request
     // doesn't get rejected with an "invalid input tag" error.
+    //
+    // IMPORTANT: Skip when chat_completion_source === 'claude' (native ST Claude backend).
+    // That backend (sendClaudeRequest) does its own OpenAI→Anthropic conversion for both
+    // tools and tool_choice. Converting here first causes double-wrapping:
+    //   'auto' → { type: 'auto' } [TunnelVision] → { type: { type: 'auto' } } [backend] ← bug
+    // It also causes tools to be filtered out by the backend's .filter(t => t.type === 'function').
+    // Only convert when going through a proxy/custom endpoint that does NOT handle the conversion.
     if (data.tools?.length && isAnthropicApi(data)) {
-        const hasOpenAIWrapped = data.tools.some(t => t?.type === 'function' && t.function);
-        if (hasOpenAIWrapped) {
-            data.tools = data.tools.map(convertToolToAnthropicFormat);
-            if (data.tool_choice !== undefined) {
-                const converted = convertToolChoiceToAnthropicFormat(data.tool_choice);
-                if (converted === undefined) {
-                    delete data.tool_choice;
-                } else {
-                    data.tool_choice = converted;
+        let isNativeClaudeBackend = false;
+        try {
+            const ctx = getContext();
+            isNativeClaudeBackend = ctx?.chatCompletionSettings?.chat_completion_source === 'claude';
+        } catch { /* ignore */ }
+
+        if (!isNativeClaudeBackend) {
+            const hasOpenAIWrapped = data.tools.some(t => t?.type === 'function' && t.function);
+            if (hasOpenAIWrapped) {
+                data.tools = data.tools.map(convertToolToAnthropicFormat);
+                if (data.tool_choice !== undefined) {
+                    const converted = convertToolChoiceToAnthropicFormat(data.tool_choice);
+                    if (converted === undefined) {
+                        delete data.tool_choice;
+                    } else {
+                        data.tool_choice = converted;
+                    }
                 }
+                console.log(`[TunnelVision] Converted ${data.tools.length} tool(s) from OpenAI to Anthropic format`);
             }
-            console.log(`[TunnelVision] Converted ${data.tools.length} tool(s) from OpenAI to Anthropic format`);
         }
     }
 
